@@ -111,8 +111,6 @@
       <version>1.4.0</version>
     </dependency>
 
-
-
     <!--<dependency>-->
       <!--<groupId>ch.hsr</groupId>-->
       <!--<artifactId>geohash</artifactId>-->

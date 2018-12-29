@@ -297,7 +297,7 @@ class DecisionTreeDF(private val sparkSession:SparkSession){
       .setTrainRatio(0.9)
 
     // 2.4 多参数的模型训练，获取最佳模型和参数
-    val validatorModel = validator.fit(train)d
+    val validatorModel = validator.fit(train)
     // 根据evaluator定义的评价方式，输出所有参数模型的评估结果
     val accuracy:Array[Double] = validatorModel.validationMetrics
     val params:Array[ParamMap] = validatorModel.getEstimatorParamMaps
