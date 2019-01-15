@@ -3,6 +3,7 @@ package cigar.Chap07_GraphX
 
 import scala.xml._
 
+case class DocInfo(id: String, topics: Seq[String])
 object ParseXML {
   /**
     * 获取文章 MeSH标签
