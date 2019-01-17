@@ -61,6 +61,8 @@ object GraphX {
     // 建立图，由顶点信息和边组成
     val topicGraph: Graph[String, Int] = Graph(vertices, edges)  // 顶点属性是 string
     topicGraph.cache()
+
+
     //println(topicGraph.vertices.count())  // 13522
     // vertices: (VertexID: Long & attribute: String)
     // edges: (srcID: Long, dstID: Long & attribute: Int)
@@ -231,10 +233,13 @@ object GraphX {
   def samplePathLengths[V: ClassTag, E: ClassTag](graph: Graph[V, E], seed: Long, sampleRatio: Double): RDD[(VertexId, VertexId, Int)] = {
     val sample = graph.vertices.map{case (vertexID, attr) => vertexID}.sample(withReplacement = false, fraction=sampleRatio, seed = seed)
     val ids: Set[VertexId] = sample.collect().toSet
+
+    // 到达自身的距离为0
     val mapGraph = graph.mapVertices((id, v) => if(ids.contains(id)) Map(id -> 0) else Map[VertexId, Int]())
 
     val initial = Map[VertexId, Int]()  // 初始化消息，初始化图中各节点的属性
-    val res = mapGraph.ops.pregel(initialMsg = initial)(vprog = update, sendMsg = iterate, mergeMsg = mergeMaps)
+
+    val res = mapGraph.pregel(initialMsg = initial)(vprog, sendMsg, mergeMsg)
     res.vertices.flatMap{case (id, m) =>
       m.map{case (k, v) =>
         if (id < k) (id, k, v) else (k, id, v)
@@ -242,41 +247,40 @@ object GraphX {
     }.distinct()
   }
 
-
   /**
-    * 消息合并函数
+    * 同一目标节点消息的合并函数
+    * 合并相同节点，并取最小值
     * */
-  def mergeMaps(m1: Map[VertexId, Int], m2: Map[VertexId, Int]): Map[VertexId, Int] = {
-    def minThatExists(k: VertexId): Int = {
-      math.min(m1.getOrElse(k, Int.MaxValue), m2.getOrElse(k, Int.MaxValue))
-    }
-
-    (m1.keySet ++ m2.keySet).map(k => (k, minThatExists(k))).toMap
+  def mergeMsg(m1: Map[VertexId, Int], m2: Map[VertexId, Int]): Map[VertexId, Int] = {
+    val summary = (m1.toSeq ++ m2.toSeq).groupBy{case (id, dist) => id}.mapValues(_.map(_._2).min)
+    summary
   }
 
   /**
-    * 节点变换函数
-    * 对收到消息的节点进行消息的更新变换
+    * 节点计算函数，根据自身记录的属性和传递的新消息进行更新
+    * 这里的策略与消息合并一致
     * */
-  def update(id: VertexId, state: Map[VertexId, Int], msg: Map[VertexId, Int]): Map[VertexId, Int] = {
-    mergeMaps(state, msg)
+  def vprog(id: VertexId, state: Map[VertexId, Int], msg: Map[VertexId, Int]): Map[VertexId, Int] = {
+    mergeMsg(state, msg)
   }
 
-  def checkIncrement(a: Map[VertexId, Int], b: Map[VertexId, Int], bid: VertexId): Iterator[(VertexId, Map[VertexId, Int])] = {
-    val aplus = a.map{case (v, attr) => (v -> (attr + 1))}
-    if (b != mergeMaps(aplus, b)) {
-      Iterator((bid, aplus))
+  def checkIncrement(id: VertexId, a: Map[VertexId, Int], b: Map[VertexId, Int]): Iterator[(VertexId, Map[VertexId, Int])] = {
+    val aplus = a.mapValues(_ + 1)
+    if (b != mergeMsg(aplus, b)) {
+      Iterator((id, aplus))
     } else {
       Iterator.empty
     }
   }
 
   /**
-    * 消息发送函数，决定给哪些节点发送哪些消息
+    * 消息传递函数
     *
     * */
-  def iterate(e: EdgeTriplet[Map[VertexId, Int], _]): Iterator[(VertexId, Map[VertexId, Int])] = {
-    checkIncrement(e.srcAttr, e.dstAttr, e.dstId) ++ checkIncrement(e.dstAttr, e.srcAttr, e.srcId)
+  def sendMsg(e: EdgeTriplet[Map[VertexId, Int], _]): Iterator[(VertexId, Map[VertexId, Int])] = {
+
+    // 包含双向
+    checkIncrement(e.dstId, e.srcAttr, e.dstAttr) ++ checkIncrement(e.srcId, e.dstAttr, e.srcAttr)
 
   }
 
