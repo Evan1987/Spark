@@ -15,13 +15,14 @@ object GoogleGraph {
     val graph = GraphLoader.edgeListFile(spark.sparkContext, dataPath, canonicalOrientation=false)
 
 
+
     /*val sourceId: VertexId = 3
     val sssp = getSingleSourceShortestPathLength(graph, sourceId)
     sssp.vertices.collect().foreach{case (targetID, dist) => println(s"$sourceId -> $targetID:  $dist")}*/
 
     //**** test1
-    //val testResult = exploreMsgSend(graph)
-    //testResult.vertices.collect().sortBy(_._1).foreach{case (id, value) => println(s"$id: $value")}
+    /*val testResult = exploreMsgSend(graph)
+    testResult.vertices.collect().sortBy(_._1).foreach{case (id, value) => println(s"$id: $value")}*/
 
     //**** test2
     val testResult = getBiggestNum(graph)
