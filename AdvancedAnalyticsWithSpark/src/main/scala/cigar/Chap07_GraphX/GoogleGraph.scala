@@ -12,7 +12,7 @@ object GoogleGraph {
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.ERROR)
     val spark = SparkSession.builder().appName("TestGraph").master("local[4]").getOrCreate()
-    val graph = GraphLoader.edgeListFile(spark.sparkContext, dataPath, canonicalOrientation=false)
+    val graph = GraphLoader.edgeListFile(spark.sparkContext, dataPath, canonicalOrientation=true)
 
 
 
@@ -25,8 +25,12 @@ object GoogleGraph {
     testResult.vertices.collect().sortBy(_._1).foreach{case (id, value) => println(s"$id: $value")}*/
 
     //**** test2
-    val testResult = getBiggestNum(graph)
-    testResult.vertices.collect().sortBy(_._1).foreach{case (id, value) => println(s"$id: $value")}
+    /*val testResult = getBiggestNum(graph)
+    testResult.vertices.collect().sortBy(_._1).foreach{case (id, value) => println(s"$id: $value")}*/
+
+    //**** test3
+    val testResult = exploreMsgAgg(graph)
+    testResult.collect().sortBy(_._1).foreach{case (id, value) => println(s"$id: $value")}
   }
 
   /**
@@ -112,5 +116,17 @@ object GoogleGraph {
 
     val result = newGraph.pregel[Double](initialMsg = initialMessage, maxIterations = Int.MaxValue, activeDirection = EdgeDirection.Either)(vprog, sendMsg, mergeMsg)
     result
+  }
+
+  def exploreMsgAgg[V, E](graph: Graph[V, E]): VertexRDD[Double] = {
+    val initialGraph: Graph[Double, Int] = graph.mapVertices((id, _) => 1.0).mapTriplets(triplet => 1)
+    val sendMsg = (ctx: EdgeContext[Double, Int, Map[VertexId, Double]]) => {
+      ctx.sendToSrc(Map(ctx.srcId -> ctx.srcAttr))
+      ctx.sendToDst(Map(ctx.dstId -> ctx.dstAttr))
+      ctx.sendToDst(Map(ctx.srcId -> ctx.srcAttr))
+      ctx.sendToSrc(Map(ctx.dstId -> ctx.dstAttr))
+    }
+    val result = initialGraph.aggregateMessages[Map[VertexId, Double]](sendMsg = sendMsg, mergeMsg = _ ++ _, tripletFields = TripletFields.All)
+    result.mapValues(_.values.sum)
   }
 }
